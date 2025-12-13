@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicConnect Pro - Advanced</title>
+    
+    <!-- TAILWIND CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FONT AWESOME -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- GOOGLE FONTS -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- LEAFLET MAPS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- CHART.JS -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- TAILWIND CONFIG -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#475569',
+                        dark: '#0f172a',
+                        surface: '#ffffff',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #f8fafc; color: #1e293b; overflow: hidden; }
+        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.5); }
+        
+        /* Leaflet Custom */
+        .leaflet-container { z-index: 1; font-family: inherit; }
+        .leaflet-popup-content-wrapper { border-radius: 12px; padding: 0; overflow: hidden; }
+        .leaflet-popup-content { margin: 0; width: 260px !important; }
+        
+        /* Marker */
+        .marker-pin {
+            width: 36px; height: 36px; border-radius: 50% 50% 50% 0;
+            position: absolute; transform: rotate(-45deg);
+            left: 50%; top: 50%; margin: -20px 0 0 -20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .marker-pin::after {
+            content: ''; width: 20px; height: 20px; margin: 8px 0 0 8px;
+            background: #fff; position: absolute; border-radius: 50%;
+        }
+        .marker-icon { position: absolute; font-size: 14px; left:0; right:0; margin: 10px auto; text-align: center; transform: rotate(45deg); z-index: 10; color: white; }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        
+        /* Loader dots */
+        .loader-dots { display: inline-flex; gap: 4px; }
+        .loader-dots div { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: bounce 1.4s infinite ease-in-out both; }
+        .loader-dots div:nth-child(1) { animation-delay: -0.32s; }
+        .loader-dots div:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        /* Custom scrollbar */
+        .scroll-smooth::-webkit-scrollbar { width: 6px; }
+        .scroll-smooth::-webkit-scrollbar-track { background: #f1f5f9; }
+        .scroll-smooth::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .scroll-smooth::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Safe area for mobile */
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0); }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- LOGIN SCREEN -->
+    <div id="authScreen" class="fixed inset-0 z-50 flex items-center justify-center bg-white">
+        <div class="max-w-md w-full p-8 text-center animate-slide-up">
+            <div class="w-16 h-16 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center text-white text-2xl shadow-lg mb-6">
+                <i class="fas fa-city"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">CivicConnect Pro</h1>
+            <p class="text-slate-500 mb-8">Smart City Reporting Platform</p>
+            
+            <div class="space-y-4">
+                <input type="text" id="loginName" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Your Name">
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="setRole('citizen')" id="btnCit" class="py-3 bg-blue-50 text-blue-600 font-bold rounded-xl border border-blue-100 transition">Citizen</button>
+                    <button onclick="setRole('authority')" id="btnAuth" class="py-3 bg-white text-slate-500 font-bold rounded-xl border border-slate-200 transition">Authority</button>
+                </div>
+                <button onclick="handleLogin()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition transform active:scale-95">
+                    Enter Platform
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 mt-6">Config: chatok-38a07 (Firebase)</p>
+        </div>
+    </div>
+
+    <!-- MAIN LAYOUT -->
+    <div id="appLayout" class="hidden flex-1 flex overflow-hidden">
+        <!-- Sidebar (Desktop) -->
+        <aside class="hidden lg:flex w-64 bg-white border-r border-slate-200 flex-col z-20">
+            <div class="h-16 flex items-center px-6 border-b border-slate-100">
+                <i class="fas fa-city text-blue-600 mr-2 text-xl"></i>
+                <span class="font-bold text-lg tracking-tight">CivicConnect</span>
+            </div>
+            <nav class="p-4 space-y-2 flex-1">
+                <button onclick="switchView('dashboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 text-blue-600 font-medium nav-item transition" id="nav-dashboard">
+                    <i class="fas fa-chart-pie w-5 text-center"></i> Dashboard
+                </button>
+                <button onclick="switchView('map')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 font-medium nav-item transition" id="nav-map">
+                    <i class="fas fa-map w-5 text-center"></i> Live Map
+                </button>
+                <button onclick="switchView('feed')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 font-medium nav-item transition" id="nav-feed">
+                    <i class="fas fa-stream w-5 text-center"></i> Reports Feed
+                </button>
+                <button onclick="switchView('leaderboard')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 font-medium nav-item transition" id="nav-leaderboard">
+                    <i class="fas fa-trophy w-5 text-center"></i> Leaderboard
+                </button>
+                <button onclick="switchView('profile')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 font-medium nav-item transition" id="nav-profile">
+                    <i class="fas fa-user w-5 text-center"></i> Profile
+                </button>
+            </nav>
+            <div class="p-4 border-t border-slate-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold" id="userAvatar">U</div>
+                    <div>
+                        <div class="text-sm font-bold text-slate-800" id="userName">User</div>
+                        <div class="text-xs text-slate-500" id="userRole">Citizen</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Content -->
+        <main class="flex-1 flex flex-col bg-slate-50 relative overflow-hidden mb-16 lg:mb-0">
+            <header class="h-16 bg-white/80 backdrop-blur border-b border-slate-200 flex items-center justify-between px-6 z-10 sticky top-0">
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleSidebar()" class="lg:hidden w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2 class="text-xl font-bold text-slate-800" id="pageTitle">Dashboard</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- Quick Stats for Authorities -->
+                    <div id="quickStats" class="hidden lg:flex items-center gap-4">
+                        <div class="text-right">
+                            <div class="text-xs font-bold text-slate-400">CRITICAL</div>
+                            <div class="text-lg font-bold text-red-600" id="quickCritical">0</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs font-bold text-slate-400">IN PROGRESS</div>
+                            <div class="text-lg font-bold text-yellow-600" id="quickProgress">0</div>
+                        </div>
+                    </div>
+                    <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full font-bold shadow-lg shadow-blue-500/20 transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fas fa-plus"></i> <span class="hidden sm:inline">New Report</span>
+                    </button>
+                </div>
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth" id="mainScroll">
+                
+                <!-- VIEW: DASHBOARD -->
+                <div id="view-dashboard" class="view-section space-y-6 animate-fade-in">
+                    <!-- Stats Row -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                        <div class="glass p-5 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="text-slate-400 text-xs font-bold uppercase mb-1">Total Reports</div>
+                            <div class="text-2xl md:text-3xl font-black text-slate-800" id="statTotal">0</div>
+                        </div>
+                        <div class="glass p-5 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="text-slate-400 text-xs font-bold uppercase mb-1">Pending</div>
+                            <div class="text-2xl md:text-3xl font-black text-yellow-500" id="statPending">0</div>
+                        </div>
+                        <div class="glass p-5 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="text-slate-400 text-xs font-bold uppercase mb-1">Resolved</div>
+                            <div class="text-2xl md:text-3xl font-black text-green-500" id="statResolved">0</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 p-5 rounded-2xl shadow-lg text-white">
+                            <div class="text-blue-200 text-xs font-bold uppercase mb-1">Your XP</div>
+                            <div class="text-2xl md:text-3xl font-black" id="statXP">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="glass p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Activity Trend</h3>
+                            <div class="h-64"><canvas id="mainChart"></canvas></div>
+                        </div>
+                        <div class="glass p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fas fa-chart-pie text-purple-500"></i> Issues by Category</h3>
+                            <div class="h-64"><canvas id="pieChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <!-- Mini Feed -->
+                    <div class="glass p-6 rounded-2xl shadow-sm border border-slate-100">
+                        <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fas fa-bell text-yellow-500"></i> Recent Updates</h3>
+                        <div id="miniFeed" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- VIEW: MAP -->
+                <div id="view-map" class="view-section hidden h-full flex flex-col rounded-2xl overflow-hidden shadow-lg border border-slate-200 relative bg-slate-100 animate-fade-in" style="min-height: 500px;">
+                    <div id="leafletMap" class="w-full h-full z-0 absolute inset-0"></div>
+                    <div class="absolute top-4 left-4 z-[400] flex flex-wrap gap-2">
+                        <button onclick="filterMap('all')" class="bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-lg font-bold text-xs text-slate-700 hover:bg-white transition">All</button>
+                        <button onclick="filterMap('Critical')" class="bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-lg font-bold text-xs text-red-600 hover:bg-white transition">Critical</button>
+                        <button onclick="filterMap('High')" class="bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-lg font-bold text-xs text-orange-600 hover:bg-white transition">High</button>
+                        <button onclick="filterMap('Pending')" class="bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-lg font-bold text-xs text-yellow-600 hover:bg-white transition">Pending</button>
+                        <button onclick="filterMap('Resolved')" class="bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-lg font-bold text-xs text-green-600 hover:bg-white transition">Resolved</button>
+                    </div>
+                    <div class="absolute top-4 right-4 z-[400]">
+                        <button onclick="state.mapMode='pick'; pickLocation();" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow-lg font-bold text-sm flex items-center gap-2">
+                            <i class="fas fa-map-marker-alt"></i> Add Location
+                        </button>
+                    </div>
+                </div>
+
+                <!-- VIEW: FEED -->
+                <div id="view-feed" class="view-section hidden max-w-2xl mx-auto space-y-6 pb-12 animate-fade-in">
+                    <div class="glass p-4 rounded-2xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-bold text-slate-800">All Reports</h3>
+                            <div class="flex gap-2">
+                                <select onchange="filterFeed(this.value)" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                                    <option value="all">All Status</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Resolved">Resolved</option>
+                                </select>
+                                <select onchange="sortFeed(this.value)" class="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="votes">Most Votes</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="feedContainer" class="space-y-4"></div>
+                    </div>
+                </div>
+
+                <!-- VIEW: LEADERBOARD -->
+                <div id="view-leaderboard" class="view-section hidden max-w-3xl mx-auto space-y-6 animate-fade-in">
+                    <div class="bg-gradient-to-r from-yellow-500 to-orange-600 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden">
+                        <div class="relative z-10">
+                            <h2 class="text-3xl font-black mb-2">Top Citizens</h2>
+                            <p class="text-yellow-100">Recognizing heroes keeping the city safe.</p>
+                        </div>
+                        <i class="fas fa-trophy absolute -right-6 -bottom-6 text-9xl text-white/20"></i>
+                    </div>
+                    <div class="glass rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                            <h3 class="font-bold text-slate-800">Leaderboard</h3>
+                            <div class="flex items-center gap-2 text-sm text-slate-500">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Points based on reports and resolutions</span>
+                            </div>
+                        </div>
+                        <div id="leaderboardList" class="divide-y divide-slate-100"></div>
+                    </div>
+                </div>
+
+                <!-- VIEW: PROFILE -->
+                <div id="view-profile" class="view-section hidden max-w-3xl mx-auto space-y-6 animate-fade-in">
+                    <div class="glass p-8 rounded-2xl shadow-sm border border-slate-100 text-center relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-full h-24 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
+                        <div class="relative z-10 -mt-4">
+                            <div class="w-24 h-24 rounded-full bg-white p-1 mx-auto shadow-xl">
+                                <div class="w-full h-full rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-4xl font-bold text-white" id="profileAvatar">U</div>
+                            </div>
+                            <h2 class="text-2xl font-bold text-slate-800 mt-4" id="profileName">User Name</h2>
+                            <p class="text-slate-500 text-sm font-medium uppercase tracking-wide" id="profileRole">Citizen</p>
+                            
+                            <div class="grid grid-cols-3 gap-4 mt-8">
+                                <div class="p-4 bg-slate-50 rounded-xl">
+                                    <div class="text-2xl font-bold text-blue-600" id="profileReports">0</div>
+                                    <div class="text-xs text-slate-500 font-bold uppercase">Reports</div>
+                                </div>
+                                <div class="p-4 bg-slate-50 rounded-xl">
+                                    <div class="text-2xl font-bold text-yellow-500" id="profileXP">0</div>
+                                    <div class="text-xs text-slate-500 font-bold uppercase">XP Points</div>
+                                </div>
+                                <div class="p-4 bg-slate-50 rounded-xl">
+                                    <div class="text-2xl font-bold text-green-500" id="profileLevel">1</div>
+                                    <div class="text-xs text-slate-500 font-bold uppercase">Level</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- User Activity -->
+                    <div class="glass p-6 rounded-2xl shadow-sm border border-slate-100">
+                        <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fas fa-history text-blue-500"></i> Your Recent Activity</h3>
+                        <div id="userActivity" class="space-y-3">
+                            <!-- Activity items will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Mobile Navigation -->
+        <nav class="lg:hidden fixed bottom-0 w-full bg-white border-t border-slate-200 flex justify-around p-2 z-30 pb-safe">
+            <button onclick="switchView('dashboard')" class="flex flex-col items-center p-2 text-slate-400 hover:text-blue-600 mobile-nav-item" id="mob-dashboard">
+                <i class="fas fa-chart-pie text-xl mb-1"></i> <span class="text-[10px] font-bold">Dash</span>
+            </button>
+            <button onclick="switchView('map')" class="flex flex-col items-center p-2 text-slate-400 hover:text-blue-600 mobile-nav-item" id="mob-map">
+                <i class="fas fa-map text-xl mb-1"></i> <span class="text-[10px] font-bold">Map</span>
+            </button>
+            <button onclick="openModal()" class="flex flex-col items-center justify-center -mt-8">
+                <div class="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                    <i class="fas fa-plus text-xl"></i>
+                </div>
+            </button>
+            <button onclick="switchView('feed')" class="flex flex-col items-center p-2 text-slate-400 hover:text-blue-600 mobile-nav-item" id="mob-feed">
+                <i class="fas fa-stream text-xl mb-1"></i> <span class="text-[10px] font-bold">Feed</span>
+            </button>
+            <button onclick="switchView('profile')" class="flex flex-col items-center p-2 text-slate-400 hover:text-blue-600 mobile-nav-item" id="mob-profile">
+                <i class="fas fa-user text-xl mb-1"></i> <span class="text-[10px] font-bold">Me</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- REPORT MODAL (WIZARD) -->
+    <div id="reportModal" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-lg">New Report</h3>
+                    <p class="text-xs text-slate-500" id="stepIndicator">Step 1 of 4</p>
+                </div>
+                <button onclick="closeModal('reportModal')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1">
+                <!-- Step 1: Category -->
+                <div id="step-1" class="wizard-step space-y-4">
+                    <h4 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Select Category</h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="selectCategory('Infrastructure')" class="cat-btn p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                            <i class="fas fa-road text-2xl mb-2 text-slate-400 group-hover:text-blue-600"></i>
+                            <div class="font-bold text-slate-700">Infrastructure</div>
+                            <p class="text-xs text-slate-500 mt-1">Roads, bridges, public buildings</p>
+                        </button>
+                        <button onclick="selectCategory('Sanitation')" class="cat-btn p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                            <i class="fas fa-trash text-2xl mb-2 text-slate-400 group-hover:text-blue-600"></i>
+                            <div class="font-bold text-slate-700">Sanitation</div>
+                            <p class="text-xs text-slate-500 mt-1">Garbage, cleanliness, waste management</p>
+                        </button>
+                        <button onclick="selectCategory('Safety')" class="cat-btn p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                            <i class="fas fa-shield-alt text-2xl mb-2 text-slate-400 group-hover:text-blue-600"></i>
+                            <div class="font-bold text-slate-700">Public Safety</div>
+                            <p class="text-xs text-slate-500 mt-1">Security, hazards, emergency</p>
+                        </button>
+                        <button onclick="selectCategory('Transport')" class="cat-btn p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                            <i class="fas fa-bus text-2xl mb-2 text-slate-400 group-hover:text-blue-600"></i>
+                            <div class="font-bold text-slate-700">Transport</div>
+                            <p class="text-xs text-slate-500 mt-1">Traffic, public transport, parking</p>
+                        </button>
+                        <button onclick="selectCategory('Utilities')" class="cat-btn p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                            <i class="fas fa-bolt text-2xl mb-2 text-slate-400 group-hover:text-blue-600"></i>
+                            <div class="font-bold text-slate-700">Utilities</div>
+                            <p class="text-xs text-slate-500 mt-1">Water, electricity, internet</p>
+                        </button>
+                        <button onclick="selectCategory('Other')" class="cat-btn p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition text-left group">
+                            <i class="fas fa-ellipsis-h text-2xl mb-2 text-slate-400 group-hover:text-blue-600"></i>
+                            <div class="font-bold text-slate-700">Other</div>
+                            <p class="text-xs text-slate-500 mt-1">Any other issues</p>
+                        </button>
+                    </div>
+                    <input type="hidden" id="selectedCategory">
+                </div>
+
+                <!-- Step 2: Details & Image -->
+                <div id="step-2" class="wizard-step hidden space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-slate-400 uppercase">Evidence Photo</label>
+                        <div class="relative h-40 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 transition flex flex-col items-center justify-center cursor-pointer overflow-hidden group" onclick="document.getElementById('inpImg').click()">
+                            <input type="file" id="inpImg" accept="image/*" class="hidden" onchange="window.previewImage(this, 'imgPreview', 'uploadPlaceholder')">
+                            <div id="uploadPlaceholder" class="text-center p-4">
+                                <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mx-auto mb-2 text-blue-500 group-hover:scale-110 transition"><i class="fas fa-camera text-xl"></i></div>
+                                <p class="text-xs text-slate-500 font-bold">Tap to upload</p>
+                                <p class="text-[10px] text-slate-400">AI will analyze your image</p>
+                            </div>
+                            <img id="imgPreview" class="absolute inset-0 w-full h-full object-cover hidden">
+                            <!-- AI Loading Overlay -->
+                            <div id="aiLoader" class="absolute inset-0 bg-white/90 flex-col items-center justify-center hidden z-10">
+                                <div class="loader-dots text-blue-600 mb-2"><div></div><div></div><div></div></div>
+                                <span class="text-xs font-bold text-slate-500">AI Analyzing Image...</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-slate-400 uppercase">Description</label>
+                        <textarea id="inpDesc" rows="3" class="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none transition" placeholder="Describe the issue in detail..."></textarea>
+                        <p class="text-xs text-slate-400">Be specific about what needs to be fixed</p>
+                    </div>
+                </div>
+
+                <!-- Step 3: Priority -->
+                <div id="step-3" class="wizard-step hidden space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-slate-400 uppercase">Priority Level</label>
+                        <div class="grid grid-cols-3 gap-3">
+                            <button onclick="setPriority('Low')" class="prio-btn flex flex-col items-center p-4 rounded-xl border border-slate-200 hover:border-green-500 hover:bg-green-50 transition" data-val="Low">
+                                <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-2"><i class="fas fa-check"></i></div>
+                                <div class="font-bold text-slate-700">Low</div>
+                                <p class="text-xs text-slate-500">Minor issue</p>
+                            </button>
+                            <button onclick="setPriority('Normal')" class="prio-btn flex flex-col items-center p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition" data-val="Normal">
+                                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mb-2"><i class="fas fa-exclamation"></i></div>
+                                <div class="font-bold text-slate-700">Normal</div>
+                                <p class="text-xs text-slate-500">Standard priority</p>
+                            </button>
+                            <button onclick="setPriority('High')" class="prio-btn flex flex-col items-center p-4 rounded-xl border border-slate-200 hover:border-orange-500 hover:bg-orange-50 transition" data-val="High">
+                                <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 mb-2"><i class="fas fa-exclamation-triangle"></i></div>
+                                <div class="font-bold text-slate-700">High</div>
+                                <p class="text-xs text-slate-500">Urgent attention</p>
+                            </button>
+                        </div>
+                        <div class="mt-4">
+                            <button onclick="setPriority('Critical')" class="prio-btn w-full flex items-center gap-3 p-4 rounded-xl border border-slate-200 hover:border-red-500 hover:bg-red-50 transition text-left" data-val="Critical">
+                                <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-skull-crossbones"></i></div>
+                                <div class="flex-1">
+                                    <div class="font-bold text-slate-700">Critical</div>
+                                    <p class="text-xs text-slate-500">Emergency - immediate action required</p>
+                                </div>
+                            </button>
+                        </div>
+                        <input type="hidden" id="selectedPriority" value="Normal">
+                    </div>
+                </div>
+
+                <!-- Step 4: Location & Review -->
+                <div id="step-4" class="wizard-step hidden space-y-4">
+                    <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 flex items-start gap-3">
+                        <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                        <p class="text-sm text-blue-700">Accurate location helps authorities resolve issues faster.</p>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-slate-400 uppercase">Location</label>
+                        <div class="flex gap-2">
+                            <input id="inpLoc" type="text" class="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none" placeholder="Click 'Pick on Map' to select location..." readonly>
+                            <button onclick="pickLocation()" class="px-4 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20"><i class="fas fa-map-marker-alt mr-2"></i> Pick on Map</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Review Summary -->
+                    <div class="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <h4 class="text-sm font-bold text-slate-700 mb-3">Review Your Report</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Category:</span>
+                                <span class="font-bold text-slate-700" id="reviewCategory">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Priority:</span>
+                                <span class="font-bold" id="reviewPriority">-</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Image:</span>
+                                <span class="font-bold text-slate-700" id="reviewImage">No image</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Location:</span>
+                                <span class="font-bold text-slate-700" id="reviewLocation">Not selected</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-5 border-t border-slate-100 bg-slate-50 flex justify-between">
+                <button onclick="prevStep()" id="btnBack" class="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 transition hidden">Back</button>
+                <button onclick="nextStep()" id="btnNext" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 transition ml-auto">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- COMMENTS MODAL -->
+    <div id="commentsModal" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                <h3 class="font-bold text-slate-800 text-lg">Comments</h3>
+                <button onclick="closeModal('commentsModal')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1">
+                <div id="commentsList" class="space-y-4 mb-6"></div>
+                <div class="flex gap-2">
+                    <input type="text" id="newComment" class="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Add a comment...">
+                    <button onclick="postComment()" class="px-4 bg-blue-600 text-white rounded-xl font-bold"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+            <input type="hidden" id="currentReportId">
+        </div>
+    </div>
+
+    <!-- RESOLUTION PROOF MODAL -->
+    <div id="resolveModal" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white">
+                <h3 class="font-bold text-slate-800 text-lg">Resolve Issue</h3>
+                <button onclick="closeModal('resolveModal')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-400 uppercase">Update Status</label>
+                    <select id="statusSelect" class="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none">
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                    </select>
+                </div>
+                
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-400 uppercase">Proof Photo (Optional)</label>
+                    <div class="relative h-32 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 transition flex flex-col items-center justify-center cursor-pointer overflow-hidden" onclick="document.getElementById('resImg').click()">
+                        <input type="file" id="resImg" accept="image/*" class="hidden" onchange="window.previewImage(this, 'resImgPreview', 'resPlaceholder')">
+                        <div id="resPlaceholder" class="text-center p-4">
+                            <i class="fas fa-camera text-2xl text-slate-300 mb-1"></i>
+                            <p class="text-xs text-slate-500 font-bold">Tap to upload proof</p>
+                        </div>
+                        <img id="resImgPreview" class="absolute inset-0 w-full h-full object-cover hidden">
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-400 uppercase">Resolution Notes</label>
+                    <textarea id="resNote" rows="2" class="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 focus:ring-2 focus:ring-green-500 outline-none transition" placeholder="Describe how the issue was resolved..."></textarea>
+                </div>
+                
+                <input type="hidden" id="resolveId">
+                
+                <button onclick="confirmResolve()" id="btnConfirmResolve" class="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg shadow-green-500/20 transition">
+                    Update Status
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="fixed top-6 right-6 z-[100] bg-white shadow-xl rounded-xl p-4 border-l-4 border-blue-500 transform translate-x-[200%] transition-transform duration-300 flex items-center gap-3">
+        <i class="fas fa-info-circle text-blue-500 text-xl" id="toastIcon"></i>
+        <div><h4 id="toastTitle" class="font-bold text-sm">Notice</h4><p id="toastMsg" class="text-xs text-slate-500">Msg</p></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, increment, arrayUnion, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // CONFIG (chatok-38a07)
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6ImTLczrMo8m07fjYWVCeOjszrzgYw1w",
+            authDomain: "chatok-38a07.firebaseapp.com",
+            projectId: "chatok-38a07",
+            storageBucket: "chatok-38a07.firebasestorage.app",
+            messagingSenderId: "405598576994",
+            appId: "1:405598576994:web:cdcb15ea806924753acc3b"
+        };
+        const appId = 'civic-connect-reborn';
+
+        // STATE
+        const state = {
+            user: null, role: 'citizen', reports: [], map: null, markers: [],
+            mapMode: 'view', tempMarker: null, name: 'Anonymous',
+            wizardStep: 1, currentFilter: 'all', activeMapFilter: 'all',
+            comments: {}, userActivities: []
+        };
+
+        // INIT FIREBASE
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // AUTH
+        async function initAuth() {
+            try {
+                await signInAnonymously(auth);
+            } catch (e) {
+                console.warn("Auth fallback", e);
+                state.user = { uid: 'guest-' + Date.now() }; 
+                startListener(); 
+            }
+        }
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) { state.user = user; startListener(); }
+        });
+
+        // CORE FUNCTIONS
+        window.setRole = (r) => {
+            state.role = r;
+            document.getElementById('btnCit').className = r==='citizen' ? "py-3 bg-blue-50 text-blue-600 font-bold rounded-xl border border-blue-100 transition" : "py-3 bg-white text-slate-500 font-bold rounded-xl border border-slate-200 transition";
+            document.getElementById('btnAuth').className = r==='authority' ? "py-3 bg-blue-50 text-blue-600 font-bold rounded-xl border border-blue-100 transition" : "py-3 bg-white text-slate-500 font-bold rounded-xl border border-slate-200 transition";
+        };
+
+        window.handleLogin = () => {
+            const name = document.getElementById('loginName').value || 'User';
+            state.name = name;
+            document.getElementById('userName').innerText = name;
+            document.getElementById('userRole').innerText = state.role;
+            document.getElementById('userAvatar').innerText = name[0];
+            document.getElementById('profileName').innerText = name;
+            document.getElementById('profileRole').innerText = state.role;
+            document.getElementById('profileAvatar').innerText = name[0];
+            
+            document.getElementById('authScreen').classList.add('hidden');
+            document.getElementById('appLayout').classList.remove('hidden');
+            initMap();
+            
+            // Show/hide authority features
+            if(state.role === 'authority') {
+                document.getElementById('quickStats').classList.remove('hidden');
+            }
+            
+            if(state.reports.length === 0) startListener();
+        };
+
+        window.switchView = (id) => {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.replace('bg-blue-50', 'hover:bg-slate-50');
+                el.classList.replace('text-blue-600', 'text-slate-600');
+            });
+            const deskBtn = document.getElementById('nav-'+id);
+            if(deskBtn) {
+                deskBtn.classList.add('bg-blue-50', 'text-blue-600');
+                deskBtn.classList.remove('text-slate-600', 'hover:bg-slate-50');
+            }
+
+            document.querySelectorAll('.mobile-nav-item').forEach(el => el.classList.remove('text-blue-600', 'active'));
+            const mobBtn = document.getElementById('mob-'+id);
+            if(mobBtn) mobBtn.classList.add('text-blue-600', 'active');
+            
+            document.getElementById('view-'+id).classList.remove('hidden');
+            document.getElementById('pageTitle').innerText = id.charAt(0).toUpperCase() + id.slice(1);
+            if(id === 'map' && state.map) {
+                setTimeout(() => {
+                    state.map.invalidateSize();
+                    if(state.activeMapFilter !== 'all') filterMap(state.activeMapFilter);
+                }, 100);
+            }
+        };
+
+        window.toggleSidebar = () => {
+            const sidebar = document.querySelector('aside');
+            sidebar.classList.toggle('hidden');
+            sidebar.classList.toggle('flex');
+        };
+
+        // MAP
+        function initMap() {
+            if(state.map) return;
+            state.map = L.map('leafletMap', { zoomControl: false }).setView([40.7128, -74.0060], 13);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(state.map);
+            L.control.zoom({ position: 'bottomright' }).addTo(state.map);
+            
+            state.map.on('click', (e) => {
+                if(state.mapMode === 'pick') {
+                    if(state.tempMarker) state.map.removeLayer(state.tempMarker);
+                    state.tempMarker = L.marker(e.latlng).addTo(state.map);
+                    const lat = e.latlng.lat.toFixed(4);
+                    const lng = e.latlng.lng.toFixed(4);
+                    document.getElementById('inpLoc').value = `${lat}, ${lng}`;
+                    document.getElementById('reviewLocation').innerText = `${lat}, ${lng}`;
+                    state.mapMode = 'view';
+                    document.getElementById('leafletMap').style.cursor = '';
+                    showToast('Location Selected', 'Returning to report wizard');
+                    
+                    // Return to modal after 1 second
+                    setTimeout(() => {
+                        document.getElementById('reportModal').classList.remove('hidden');
+                        state.wizardStep = 4;
+                        updateWizardUI();
+                        updateReviewSummary();
+                    }, 1000);
+                }
+            });
+        }
+
+        function updateMarkers() {
+            if(!state.map) return;
+            state.markers.forEach(m => state.map.removeLayer(m));
+            state.markers = [];
+            
+            let filteredReports = state.reports;
+            if(state.activeMapFilter === 'Critical') {
+                filteredReports = state.reports.filter(r => r.priority === 'Critical');
+            } else if(state.activeMapFilter === 'High') {
+                filteredReports = state.reports.filter(r => r.priority === 'High');
+            } else if(state.activeMapFilter === 'Pending') {
+                filteredReports = state.reports.filter(r => r.status === 'Pending');
+            } else if(state.activeMapFilter === 'Resolved') {
+                filteredReports = state.reports.filter(r => r.status === 'Resolved');
+            }
+            
+            filteredReports.forEach(r => {
+                if(r.coords && r.coords.length === 2) {
+                    let color = '#3b82f6'; // Default blue
+                    if(r.priority === 'Critical') color = '#ef4444';
+                    else if(r.priority === 'High') color = '#f97316';
+                    else if(r.priority === 'Normal') color = '#3b82f6';
+                    else if(r.priority === 'Low') color = '#22c55e';
+                    
+                    if(r.status === 'Resolved') color = '#10b981';
+                    else if(r.status === 'In Progress') color = '#eab308';
+                    
+                    const icon = L.divIcon({
+                        className: 'custom',
+                        html: `<div class="marker-pin" style="background:${color}"></div>
+                               <i class="fas ${getCategoryIcon(r.category)} marker-icon"></i>`,
+                        iconSize: [30, 42],
+                        iconAnchor: [15, 42]
+                    });
+                    
+                    let popupContent = `<div class="font-sans p-3 max-w-xs">
+                        <div class="flex justify-between items-start mb-2">
+                            <b class="text-sm">${r.category}</b>
+                            <span class="text-xs px-2 py-1 rounded ${getPriorityClass(r.priority)}">${r.priority}</span>
+                        </div>
+                        <p class="text-xs text-slate-600 mb-2">${r.description.substring(0,80)}...</p>
+                        <div class="text-xs text-slate-500 flex justify-between">
+                            <span>By: ${r.user}</span>
+                            <span>${r.status}</span>
+                        </div>
+                    </div>`;
+                    
+                    const m = L.marker(r.coords, {icon}).addTo(state.map).bindPopup(popupContent);
+                    state.markers.push(m);
+                }
+            });
+        }
+
+        window.filterMap = (filter) => {
+            state.activeMapFilter = filter;
+            updateMarkers();
+            showToast('Map Filter', `Showing ${filter} issues`, 'info');
+        };
+
+        window.pickLocation = () => {
+            document.getElementById('reportModal').classList.add('hidden');
+            switchView('map');
+            state.mapMode = 'pick';
+            document.getElementById('leafletMap').style.cursor = 'crosshair';
+            showToast('Select Location', 'Tap on the map to pin location');
+        };
+
+        function getCategoryIcon(category) {
+            const icons = {
+                'Infrastructure': 'fa-road',
+                'Sanitation': 'fa-trash',
+                'Safety': 'fa-shield-alt',
+                'Transport': 'fa-bus',
+                'Utilities': 'fa-bolt',
+                'Other': 'fa-ellipsis-h'
+            };
+            return icons[category] || 'fa-exclamation';
+        }
+
+        function getPriorityClass(priority) {
+            const classes = {
+                'Critical': 'bg-red-100 text-red-800',
+                'High': 'bg-orange-100 text-orange-800',
+                'Normal': 'bg-blue-100 text-blue-800',
+                'Low': 'bg-green-100 text-green-800'
+            };
+            return classes[priority] || 'bg-slate-100 text-slate-800';
+        }
+
+        // WIZARD
+        window.openModal = () => { 
+            state.wizardStep = 1;
+            // Reset form
+            document.getElementById('selectedCategory').value = '';
+            document.getElementById('inpDesc').value = '';
+            document.getElementById('selectedPriority').value = 'Normal';
+            document.getElementById('inpLoc').value = '';
+            document.getElementById('inpImg').value = '';
+            document.getElementById('imgPreview').classList.add('hidden');
+            document.getElementById('uploadPlaceholder').classList.remove('hidden');
+            
+            // Reset UI
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50');
+            });
+            document.querySelectorAll('.prio-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'border-green-500', 'bg-green-50', 'border-orange-500', 'bg-orange-50', 'border-red-500', 'bg-red-50');
+            });
+            
+            updateWizardUI();
+            document.getElementById('reportModal').classList.remove('hidden'); 
+        };
+        
+        window.closeModal = (id) => { 
+            document.getElementById(id).classList.add('hidden'); 
+            if(id === 'reportModal') {
+                state.mapMode = 'view';
+                document.getElementById('leafletMap').style.cursor = '';
+                if(state.tempMarker) {
+                    state.map.removeLayer(state.tempMarker);
+                    state.tempMarker = null;
+                }
+            }
+        };
+
+        window.selectCategory = (cat) => {
+            document.getElementById('selectedCategory').value = cat;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50');
+                if(btn.textContent.includes(cat)) btn.classList.add('border-blue-500', 'bg-blue-50');
+            });
+            updateReviewSummary();
+        };
+
+        window.setPriority = (prio) => {
+            document.getElementById('selectedPriority').value = prio;
+            document.querySelectorAll('.prio-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50', 'border-green-500', 'bg-green-50', 'border-orange-500', 'bg-orange-50', 'border-red-500', 'bg-red-50');
+                if(btn.dataset.val === prio) {
+                    if(prio === 'Low') btn.classList.add('border-green-500', 'bg-green-50');
+                    else if(prio === 'Normal') btn.classList.add('border-blue-500', 'bg-blue-50');
+                    else if(prio === 'High') btn.classList.add('border-orange-500', 'bg-orange-50');
+                    else if(prio === 'Critical') btn.classList.add('border-red-500', 'bg-red-50');
+                }
+            });
+            updateReviewSummary();
+        };
+
+        window.nextStep = () => {
+            if(state.wizardStep === 1) {
+                if(!document.getElementById('selectedCategory').value) return showToast('Required', 'Select category', 'error');
+                state.wizardStep = 2;
+            } else if (state.wizardStep === 2) {
+                if(!document.getElementById('inpDesc').value) return showToast('Required', 'Add description', 'error');
+                state.wizardStep = 3;
+            } else if (state.wizardStep === 3) {
+                if(!document.getElementById('selectedPriority').value) return showToast('Required', 'Select priority', 'error');
+                state.wizardStep = 4;
+                updateReviewSummary();
+            } else if (state.wizardStep === 4) {
+                if(!document.getElementById('inpLoc').value) return showToast('Required', 'Select location', 'error');
+                submitReport();
+                return;
+            }
+            updateWizardUI();
+        };
+
+        window.prevStep = () => { 
+            if(state.wizardStep > 1) { 
+                state.wizardStep--; 
+                updateWizardUI();
+                if(state.wizardStep === 3) updateReviewSummary();
+            } 
+        };
+
+        function updateWizardUI() {
+            document.querySelectorAll('.wizard-step').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`step-${state.wizardStep}`).classList.remove('hidden');
+            document.getElementById('stepIndicator').innerText = `Step ${state.wizardStep} of 4`;
+            const btnBack = document.getElementById('btnBack');
+            const btnNext = document.getElementById('btnNext');
+            btnBack.classList.toggle('hidden', state.wizardStep === 1);
+            btnNext.innerText = state.wizardStep === 4 ? 'Submit Report' : 'Next';
+        }
+
+        function updateReviewSummary() {
+            document.getElementById('reviewCategory').innerText = document.getElementById('selectedCategory').value || '-';
+            
+            const priority = document.getElementById('selectedPriority').value;
+            document.getElementById('reviewPriority').innerText = priority || '-';
+            document.getElementById('reviewPriority').className = 'font-bold ' + 
+                (priority === 'Critical' ? 'text-red-600' : 
+                 priority === 'High' ? 'text-orange-600' : 
+                 priority === 'Normal' ? 'text-blue-600' : 'text-green-600');
+            
+            document.getElementById('reviewImage').innerText = 
+                document.getElementById('inpImg').files.length > 0 ? 'Image uploaded' : 'No image';
+            
+            document.getElementById('reviewLocation').innerText = 
+                document.getElementById('inpLoc').value || 'Not selected';
+        }
+
+        // IMAGE
+        window.previewImage = (input, imgId, phId) => {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = document.getElementById(imgId);
+                    img.src = e.target.result;
+                    img.classList.remove('hidden');
+                    document.getElementById(phId).classList.add('hidden');
+                    if(imgId === 'imgPreview') {
+                        // Simulate AI analysis
+                        const loader = document.getElementById('aiLoader');
+                        loader.classList.remove('hidden'); 
+                        loader.classList.add('flex');
+                        setTimeout(() => { 
+                            loader.classList.add('hidden'); 
+                            loader.classList.remove('flex'); 
+                            showToast('AI Analysis', 'Category detected from image', 'success');
+                            // Auto-select category based on image (simulated)
+                            const categories = ['Infrastructure', 'Sanitation', 'Safety', 'Transport', 'Utilities'];
+                            const randomCat = categories[Math.floor(Math.random() * categories.length)];
+                            selectCategory(randomCat);
+                        }, 1500);
+                    }
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        };
+
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 600;
+                        const scaleSize = MAX_WIDTH / img.width;
+                        canvas.width = MAX_WIDTH; 
+                        canvas.height = img.height * scaleSize;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        resolve(canvas.toDataURL('image/jpeg', 0.6));
+                    }
+                }
+            });
+        }
+
+        // SUBMIT REPORT
+        window.submitReport = async () => {
+            const desc = document.getElementById('inpDesc').value;
+            const cat = document.getElementById('selectedCategory').value;
+            const prio = document.getElementById('selectedPriority').value;
+            const locStr = document.getElementById('inpLoc').value;
+            const fileInput = document.getElementById('inpImg');
+            
+            if(!locStr) return showToast('Location Missing', 'Pick a location', 'error');
+            document.getElementById('btnNext').innerText = 'Uploading...';
+            document.getElementById('btnNext').disabled = true;
+            
+            let coords = [40.7128, -74.0060];
+            if(locStr.includes(',')) {
+                const parts = locStr.split(',').map(p => parseFloat(p.trim()));
+                if(parts.length >= 2) coords = [parts[0], parts[1]];
+            }
+
+            try {
+                let imageBase64 = null;
+                if(fileInput.files.length > 0) {
+                    imageBase64 = await compressImage(fileInput.files[0]);
+                }
+
+                await addDoc(collection(db, `artifacts/${appId}/public/data/reports`), {
+                    description: desc, 
+                    category: cat, 
+                    priority: prio, 
+                    coords: coords,
+                    image: imageBase64, 
+                    status: 'Pending', 
+                    timestamp: Date.now(),
+                    createdAt: serverTimestamp(),
+                    user: state.name, 
+                    uid: state.user?.uid || 'anon',
+                    upvotes: 0, 
+                    comments: [],
+                    voters: []
+                });
+                
+                showToast('Success', 'Report submitted successfully!');
+                closeModal('reportModal');
+                
+                // Reset form
+                document.getElementById('inpDesc').value = '';
+                document.getElementById('inpLoc').value = '';
+                document.getElementById('inpImg').value = '';
+                document.getElementById('selectedCategory').value = '';
+                document.getElementById('selectedPriority').value = 'Normal';
+                state.wizardStep = 1;
+                updateWizardUI();
+                
+            } catch(e) { 
+                console.error(e); 
+                showToast('Error', 'Failed to submit report', 'error'); 
+            }
+            document.getElementById('btnNext').innerText = 'Submit Report';
+            document.getElementById('btnNext').disabled = false;
+        };
+
+        // COMMENTS SYSTEM
+        window.openComments = async (reportId) => {
+            document.getElementById('currentReportId').value = reportId;
+            document.getElementById('newComment').value = '';
+            
+            // Load comments
+            const report = state.reports.find(r => r.id === reportId);
+            if(report && report.comments) {
+                displayComments(report.comments);
+            } else {
+                document.getElementById('commentsList').innerHTML = '<p class="text-center text-slate-500 py-4">No comments yet</p>';
+            }
+            
+            document.getElementById('commentsModal').classList.remove('hidden');
+        };
+
+        window.postComment = async () => {
+            const reportId = document.getElementById('currentReportId').value;
+            const commentText = document.getElementById('newComment').value.trim();
+            
+            if(!commentText) return;
+            
+            try {
+                await updateDoc(doc(db, `artifacts/${appId}/public/data/reports`, reportId), {
+                    comments: arrayUnion({
+                        user: state.name,
+                        text: commentText,
+                        timestamp: Date.now()
+                    })
+                });
+                
+                document.getElementById('newComment').value = '';
+                showToast('Success', 'Comment added');
+                
+                // Refresh comments
+                const report = state.reports.find(r => r.id === reportId);
+                if(report) {
+                    if(!report.comments) report.comments = [];
+                    report.comments.push({
+                        user: state.name,
+                        text: commentText,
+                        timestamp: Date.now()
+                    });
+                    displayComments(report.comments);
+                }
+            } catch(e) {
+                console.error(e);
+                showToast('Error', 'Failed to post comment', 'error');
+            }
+        };
+
+        function displayComments(comments) {
+            if(!comments || comments.length === 0) {
+                document.getElementById('commentsList').innerHTML = '<p class="text-center text-slate-500 py-4">No comments yet</p>';
+                return;
+            }
+            
+            const sortedComments = comments.sort((a, b) => b.timestamp - a.timestamp);
+            document.getElementById('commentsList').innerHTML = sortedComments.map(comment => `
+                <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-bold flex-shrink-0">
+                        ${comment.user[0]}
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <span class="font-bold text-sm text-slate-700">${comment.user}</span>
+                            <span class="text-xs text-slate-400">${new Date(comment.timestamp).toLocaleDateString()}</span>
+                        </div>
+                        <p class="text-sm text-slate-600 mt-1">${comment.text}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // UPVOTE SYSTEM
+        window.upvote = async (reportId) => {
+            const report = state.reports.find(r => r.id === reportId);
+            if(!report) return;
+            
+            // Check if user already voted
+            if(report.voters && report.voters.includes(state.user?.uid)) {
+                showToast('Already Voted', 'You can only vote once per report', 'info');
+                return;
+            }
+            
+            try {
+                await updateDoc(doc(db, `artifacts/${appId}/public/data/reports`, reportId), {
+                    upvotes: increment(1),
+                    voters: arrayUnion(state.user?.uid || 'anon')
+                });
+                showToast('Upvoted', 'Thanks for your feedback!');
+            } catch(e) {
+                console.error(e);
+                showToast('Error', 'Failed to upvote', 'error');
+            }
+        };
+
+        // RESOLUTION FLOW
+        window.openResolveModal = (reportId) => {
+            document.getElementById('resolveId').value = reportId;
+            document.getElementById('resNote').value = '';
+            document.getElementById('statusSelect').value = 'In Progress';
+            document.getElementById('resImg').value = '';
+            document.getElementById('resImgPreview').classList.add('hidden');
+            document.getElementById('resPlaceholder').classList.remove('hidden');
+            document.getElementById('resolveModal').classList.remove('hidden');
+        };
+
+        window.confirmResolve = async () => {
+            const reportId = document.getElementById('resolveId').value;
+            const status = document.getElementById('statusSelect').value;
+            const note = document.getElementById('resNote').value;
+            const fileInput = document.getElementById('resImg');
+            const btn = document.getElementById('btnConfirmResolve');
+            
+            if(status === 'Resolved' && !note.trim()) {
+                return showToast('Required', 'Please add resolution notes', 'error');
+            }
+            
+            btn.innerText = 'Saving...';
+            btn.disabled = true;
+            
+            try {
+                let proofImage = null;
+                if(fileInput.files.length > 0) {
+                    proofImage = await compressImage(fileInput.files[0]);
+                }
+
+                const updateData = {
+                    status: status,
+                    resolution: {
+                        by: state.name,
+                        note: note || 'Issue marked as ' + status,
+                        proof: proofImage,
+                        at: Date.now()
+                    }
+                };
+                
+                // If resolved, add XP to reporter
+                if(status === 'Resolved') {
+                    const report = state.reports.find(r => r.id === reportId);
+                    if(report) {
+                        // In a real app, you would update user XP here
+                        showToast('Success', 'Issue resolved! XP awarded to reporter.');
+                    }
+                }
+                
+                await updateDoc(doc(db, `artifacts/${appId}/public/data/reports`, reportId), updateData);
+                showToast('Success', `Status updated to ${status}`);
+                closeModal('resolveModal');
+            } catch(e) { 
+                console.error(e); 
+                showToast('Error', 'Failed to update status', 'error');
+            }
+            btn.innerText = 'Update Status';
+            btn.disabled = false;
+        };
+
+        // FEED FILTERING
+        window.filterFeed = (filter) => {
+            state.currentFilter = filter;
+            updateUI();
+        };
+
+        window.sortFeed = (sortBy) => {
+            let sortedReports = [...state.reports];
+            if(sortBy === 'newest') {
+                sortedReports.sort((a, b) => b.timestamp - a.timestamp);
+            } else if(sortBy === 'oldest') {
+                sortedReports.sort((a, b) => a.timestamp - b.timestamp);
+            } else if(sortBy === 'votes') {
+                sortedReports.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
+            }
+            state.reports = sortedReports;
+            updateUI();
+        };
+
+        // DATA LISTENER
+        function startListener() {
+            const q = query(collection(db, `artifacts/${appId}/public/data/reports`), orderBy('timestamp', 'desc'));
+            onSnapshot(q, (snap) => {
+                state.reports = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                updateUI();
+            });
+        }
+
+        function updateUI() {
+            // Stats
+            const total = state.reports.length;
+            const pending = state.reports.filter(r => r.status === 'Pending').length;
+            const resolved = state.reports.filter(r => r.status === 'Resolved').length;
+            const critical = state.reports.filter(r => r.priority === 'Critical').length;
+            const inProgress = state.reports.filter(r => r.status === 'In Progress').length;
+            
+            document.getElementById('statTotal').innerText = total;
+            document.getElementById('statPending').innerText = pending;
+            document.getElementById('statResolved').innerText = resolved;
+            
+            // Quick stats for authorities
+            document.getElementById('quickCritical').innerText = critical;
+            document.getElementById('quickProgress').innerText = inProgress;
+            
+            // Leaderboard
+            const users = {};
+            state.reports.forEach(r => {
+                if(!users[r.user]) users[r.user] = { xp: 0, reports: 0 };
+                users[r.user].reports += 1;
+                users[r.user].xp += 50; // Base XP for report
+                
+                if(r.status === 'Resolved') users[r.user].xp += 100; // Bonus for resolution
+                if(r.upvotes) users[r.user].xp += r.upvotes * 10; // XP for upvotes
+                if(r.priority === 'Critical') users[r.user].xp += 50; // Bonus for critical issues
+            });
+            
+            const myXP = users[state.name] ? users[state.name].xp : 0;
+            document.getElementById('statXP').innerText = myXP;
+            document.getElementById('profileXP').innerText = myXP;
+            document.getElementById('profileReports').innerText = users[state.name] ? users[state.name].reports : 0;
+            document.getElementById('profileLevel').innerText = Math.floor(myXP / 500) + 1;
+
+            const sortedUsers = Object.entries(users)
+                .sort((a,b) => b[1].xp - a[1].xp)
+                .slice(0, 10);
+            
+            document.getElementById('leaderboardList').innerHTML = sortedUsers.map(([name, data], i) => `
+                <div class="flex items-center justify-between p-4 hover:bg-slate-50 transition">
+                    <div class="flex items-center gap-4">
+                        <div class="w-8 h-8 rounded-full flex items-center justify-center font-bold 
+                            ${i===0?'bg-yellow-100 text-yellow-600': 
+                              i===1?'bg-slate-100 text-slate-600': 
+                              i===2?'bg-orange-100 text-orange-600':
+                              'bg-slate-50 text-slate-400'}">
+                            ${i+1}
+                        </div>
+                        <div>
+                            <div class="font-bold text-slate-700">${name} ${name===state.name ? '<span class="text-blue-500">(You)</span>':''}</div>
+                            <div class="text-xs text-slate-500">${data.reports} reports</div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold text-blue-600">${data.xp} XP</div>
+                        <div class="text-xs text-slate-500">Level ${Math.floor(data.xp / 500) + 1}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Filter reports for feed
+            let filteredReports = [...state.reports];
+            if(state.currentFilter !== 'all') {
+                filteredReports = filteredReports.filter(r => r.status === state.currentFilter);
+            }
+            
+            // Feed
+            const feed = document.getElementById('feedContainer');
+            feed.innerHTML = filteredReports.map(r => {
+                const isResolved = r.status === 'Resolved';
+                const isInProgress = r.status === 'In Progress';
+                const commentCount = r.comments ? r.comments.length : 0;
+                const upvoteCount = r.upvotes || 0;
+                const hasVoted = r.voters && r.voters.includes(state.user?.uid);
+                
+                return `
+                <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm animate-fade-in relative overflow-hidden hover:shadow-md transition-shadow">
+                    ${isResolved ? '<div class="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10">RESOLVED</div>' : ''}
+                    ${isInProgress ? '<div class="absolute top-0 right-0 bg-yellow-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10">IN PROGRESS</div>' : ''}
+                    
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold">
+                                ${r.user[0]}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-800">${r.user}</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-xs font-bold px-2 py-1 rounded ${getPriorityClass(r.priority)}">${r.priority}</span>
+                                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">${r.category}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-slate-400">${new Date(r.timestamp).toLocaleDateString()}</div>
+                            ${state.role === 'authority' ? `
+                                <button onclick="openResolveModal('${r.id}')" class="mt-2 text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-green-700 transition">
+                                    ${r.status === 'Pending' ? 'Take Action' : 'Update Status'}
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    <p class="text-sm text-slate-700 mb-3 leading-relaxed">${r.description}</p>
+                    
+                    ${r.image ? `
+                        <div class="mb-3 rounded-lg overflow-hidden h-48 bg-slate-50 border border-slate-100">
+                            <img src="${r.image}" class="w-full h-full object-cover" onclick="this.classList.toggle('object-scale-down')" style="cursor: zoom-in;">
+                        </div>
+                    ` : ''}
+                    
+                    ${isResolved && r.resolution ? `
+                        <div class="bg-green-50 border border-green-100 rounded-xl p-3 mb-3">
+                            <div class="flex items-center gap-2 mb-1">
+                                <i class="fas fa-check-circle text-green-600"></i>
+                                <span class="text-xs font-bold text-green-700 uppercase">Resolved by ${r.resolution.by}</span>
+                            </div>
+                            <p class="text-sm text-green-800 mb-2">${r.resolution.note}</p>
+                            ${r.resolution.proof ? `
+                                <div class="rounded-lg overflow-hidden h-32 border border-green-200">
+                                    <img src="${r.resolution.proof}" class="w-full h-full object-cover">
+                                </div>
+                            ` : ''}
+                            <div class="text-xs text-green-600 mt-2">
+                                ${new Date(r.resolution.at).toLocaleDateString()}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <div class="flex justify-between items-center border-t border-slate-100 pt-3">
+                        <div class="flex items-center gap-4">
+                            <button onclick="upvote('${r.id}')" class="flex items-center gap-1.5 text-sm ${hasVoted ? 'text-blue-600' : 'text-slate-500'} hover:text-blue-600 transition">
+                                <i class="fas fa-thumbs-up"></i>
+                                <span>${upvoteCount}</span>
+                            </button>
+                            <button onclick="openComments('${r.id}')" class="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-600 transition">
+                                <i class="fas fa-comment"></i>
+                                <span>${commentCount}</span>
+                            </button>
+                        </div>
+                        <div class="text-xs text-slate-400">
+                            ${r.coords ? `Location: ${r.coords[0].toFixed(4)}, ${r.coords[1].toFixed(4)}` : ''}
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            // Mini Feed
+            document.getElementById('miniFeed').innerHTML = state.reports.slice(0,3).map(r => `
+                <div class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl transition cursor-pointer" onclick="switchView('feed')">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                        ${r.user[0]}
+                    </div>
+                    <div class="truncate flex-1">
+                        <div class="text-sm font-bold text-slate-700 truncate">${r.description.substring(0,50)}...</div>
+                        <div class="text-xs text-slate-400 flex items-center gap-2">
+                            <span>${r.category}</span>
+                            <span class="w-1 h-1 bg-slate-300 rounded-full"></span>
+                            <span class="${r.status === 'Resolved' ? 'text-green-500' : r.status === 'In Progress' ? 'text-yellow-500' : 'text-red-500'}">${r.status}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // User Activity
+            const userReports = state.reports.filter(r => r.user === state.name);
+            document.getElementById('userActivity').innerHTML = userReports.slice(0,5).map(r => `
+                <div class="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition">
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm 
+                        ${r.status === 'Resolved' ? 'bg-green-100 text-green-600' : 
+                          r.status === 'In Progress' ? 'bg-yellow-100 text-yellow-600' : 
+                          'bg-blue-100 text-blue-600'}">
+                        <i class="fas ${getCategoryIcon(r.category)}"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="text-sm font-medium text-slate-700 truncate">${r.description.substring(0,60)}...</div>
+                        <div class="text-xs text-slate-500">${new Date(r.timestamp).toLocaleDateString()} • ${r.status}</div>
+                    </div>
+                    <div class="text-xs font-bold ${r.priority === 'Critical' ? 'text-red-600' : r.priority === 'High' ? 'text-orange-600' : 'text-blue-600'}">
+                        ${r.priority}
+                    </div>
+                </div>
+            `).join('');
+
+            updateMarkers();
+            updateCharts();
+        }
+
+        // CHARTS
+        let lineChart, pieChart;
+        function updateCharts() {
+            // Line Chart - Weekly Activity
+            const ctx1 = document.getElementById('mainChart').getContext('2d');
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const data1 = new Array(7).fill(0);
+            
+            // Get reports from last 7 days
+            const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            const recentReports = state.reports.filter(r => r.timestamp > oneWeekAgo);
+            
+            recentReports.forEach(r => {
+                const day = new Date(r.timestamp).getDay();
+                data1[day] += 1;
+            });
+            
+            if(lineChart) lineChart.destroy();
+            lineChart = new Chart(ctx1, {
+                type: 'line',
+                data: { 
+                    labels: days, 
+                    datasets: [{ 
+                        label: 'Reports', 
+                        data: data1, 
+                        borderColor: '#2563eb', 
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)', 
+                        fill: true, 
+                        tension: 0.4,
+                        pointBackgroundColor: '#2563eb',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false } 
+                    }, 
+                    scales: { 
+                        y: { 
+                            beginAtZero: true, 
+                            grid: { borderDash: [4, 4] },
+                            ticks: { stepSize: 1 }
+                        }, 
+                        x: { 
+                            grid: { display: false } 
+                        } 
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                } 
+            });
+
+            // Pie Chart - Categories
+            const ctx2 = document.getElementById('pieChart').getContext('2d');
+            const cats = {};
+            state.reports.forEach(r => { 
+                cats[r.category] = (cats[r.category] || 0) + 1; 
+            });
+            
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+            
+            if(pieChart) pieChart.destroy();
+            pieChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: { 
+                    labels: Object.keys(cats), 
+                    datasets: [{ 
+                        data: Object.values(cats),
+                        backgroundColor: colors.slice(0, Object.keys(cats).length),
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }] 
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { 
+                            position: 'right',
+                            labels: {
+                                padding: 15,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '65%'
+                } 
+            });
+        }
+
+        // TOAST
+        function showToast(title, msg, type='info') {
+            const t = document.getElementById('toast');
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastMsg').innerText = msg;
+            const icon = document.getElementById('toastIcon');
+            
+            if(type === 'success') { 
+                t.style.borderColor = '#22c55e'; 
+                icon.className = "fas fa-check-circle text-green-500 text-xl"; 
+            } else if(type === 'error') {
+                t.style.borderColor = '#ef4444';
+                icon.className = "fas fa-exclamation-circle text-red-500 text-xl";
+            } else if(type === 'warning') {
+                t.style.borderColor = '#f59e0b';
+                icon.className = "fas fa-exclamation-triangle text-yellow-500 text-xl";
+            } else { 
+                t.style.borderColor = '#3b82f6'; 
+                icon.className = "fas fa-info-circle text-blue-500 text-xl"; 
+            }
+            
+            t.classList.remove('translate-x-[200%]');
+            setTimeout(() => t.classList.add('translate-x-[200%]'), 3000);
+        }
+
+        // INITIALIZE
+        initAuth();
+        
+        // Auto login for demo (remove in production)
+        setTimeout(() => {
+            if(document.getElementById('authScreen').classList.contains('fixed')) {
+                document.getElementById('loginName').value = 'Demo User';
+                setRole('citizen');
+                handleLogin();
+            }
+        }, 100);
+    </script>
+</body>
+</html>
